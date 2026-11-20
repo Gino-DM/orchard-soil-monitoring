@@ -14,6 +14,21 @@ Remote orchards cannot assume continuous internet or stable power. This project 
 - a **Raspberry Pi Zero** gateway logs readings locally and forwards them to **Oracle APEX**;
 - an APEX dashboard turns the readings into farm-facing decision support.
 
+## Architecture
+
+![Hybrid edge–cloud soil monitoring architecture](docs/diagrams/architecture-white.png)
+
+```text
+Soil sensor (RS485/Modbus)
+        │
+        ▼
+ESP32-S3 sensor node ──LoRa──► Heltec receiver ──MQTT──► Raspberry Pi Zero
+                                      │                         │
+                                      │ ACK / retry              │ local CSV log
+                                      ▼                         ▼
+                                 Sensor node              Oracle APEX DSS
+```
+
 ## Development path
 
 | Branch | Stage | What it adds |
@@ -27,21 +42,40 @@ Remote orchards cannot assume continuous internet or stable power. This project 
 
 The first sketch talks directly to the 7-in-1 RS485 soil sensor. It sends the Modbus request frame, finds the expected `01 03 0E` response header, and decodes the seven registers.
 
-**Files**
-
-- `firmware/phase-01-soil-probe/Basic_sensor.ino`
-
-**Key details**
-
 - RS485 bus: `4800 baud`, `8N1`
 - Pins: `RX = GPIO19`, `TX = GPIO20`, `RE/DE = GPIO21`
-- Measured values: humidity, temperature, conductivity, pH, nitrogen, phosphorus, potassium
+- Values: humidity, temperature, conductivity, pH, nitrogen, phosphorus, potassium
 
-## Pinout references
+## Phase 2 — LoRa transport and MQTT gateway
+
+Phase 2 moves the probe reading onto a wireless link and adds the reliability behaviour that the final design depends on.
+
+**Sensor node**
+
+- Reads the same RS485 sensor through a relay-controlled power stage.
+- Packs readings into a fixed 44-byte `SoilPacket`.
+- Stores a sequence number in ESP32 non-volatile storage so reboots do not reuse sequence numbers.
+- Waits for a 23-byte ACK after each transmission and retries up to two times.
+
+**Receiver**
+
+- Receives LoRa packets and sends an ACK for both new and duplicate packets. This lets a sender that missed the first ACK recover on retransmission.
+- Tracks the last sequence number and suppresses duplicate MQTT publishes.
+- Publishes new readings to `orchard/soil/<node-id>` as JSON containing the soil values plus RSSI and SNR.
+
+**Files**
+
+- `firmware/phase-02-lora-mqtt/soil-node/soil_node.ino`
+- `firmware/phase-02-lora-mqtt/soil-node/soil_node_2.ino`
+- `firmware/phase-02-lora-mqtt/receiver/receiver.ino`
+
+## Pinout and hardware references
 
 ![ESP32-S3 pinout](docs/diagrams/esp32-s3-pinout.jpg)
 
 ![Sensor node wiring](docs/diagrams/sensor-node.png)
+
+![LoRa transmitter](docs/diagrams/lora-transmitter.png)
 
 ## Repository layout
 
@@ -53,7 +87,7 @@ gateway/                   Raspberry Pi gateway code (added in Phase 3)
 
 ## Configuration and credentials
 
-No Wi-Fi passwords, broker addresses, PI login details or other secrets are stored in this repository. Any local configuration must be supplied at deployment time and kept out of version control.
+No Wi-Fi passwords, broker addresses, PI login details or other secrets are stored in this repository. The Phase 2 receiver uses obvious placeholders; replace them locally before flashing. Any local configuration must be kept out of version control.
 
 ## Author
 
