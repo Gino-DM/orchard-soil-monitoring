@@ -36,7 +36,9 @@ ESP32-S3 sensor node ──LoRa──► Heltec receiver ──MQTT──► Ras
 | `phase-01-sensor-probe` | Phase 1 | Direct RS485/Modbus communication with the 7-in-1 soil sensor |
 | `phase-02-lora-mqtt` | Phase 2 | LoRa sender/receiver, ACK + retries, duplicate handling, MQTT publishing |
 | `phase-03-pi-apex` | Phase 3 | Deep-sleep soil nodes, Raspberry Pi gateway, APEX ingestion, diagrams |
-| `main-final` | Final | Polished README, sanitised configuration, portfolio-ready snapshot |
+| `main` | Final | Polished README, sanitised configuration, portfolio-ready snapshot |
+
+See [Development history](docs/development-history.md) for the branch graph and the reasoning behind each stage.
 
 ## Phase 1 — Reading the soil probe
 
@@ -124,7 +126,7 @@ These results support the value of local logging and retry, while also showing t
 firmware/                  Arduino sketches, grouped by development phase
 gateway/                   Raspberry Pi logger and APEX ingestion client
 docs/diagrams/             Pinout and architecture images
-docs/                      Integration notes
+docs/                      Integration notes and development history
 .env.example               Configuration template (copy to .env locally)
 ```
 
