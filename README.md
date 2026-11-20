@@ -1,6 +1,6 @@
 # Orchard Soil Monitoring
 
-A staged IoT prototype for soil-monitoring decision support in remote, off-grid orchard environments. The repository is deliberately organised as a development story: it starts with a single RS485 soil probe, adds LoRa/MQTT transport, and finishes with a Raspberry Pi gateway that logs readings locally and submits them to Oracle APEX.
+A staged IoT prototype for soil-monitoring decision support in remote, off-grid orchard environments. The repository is organised as a development story: it starts with a single RS485 soil probe, adds LoRa/MQTT transport, and finishes with a Raspberry Pi gateway that logs readings locally, retries failed submissions, and forwards them to Oracle APEX.
 
 > **Scope:** soil monitoring. Irrigation/pump-control code developed elsewhere in the project is intentionally excluded from the curated branches.
 
@@ -24,7 +24,7 @@ Soil sensor (RS485/Modbus)
         ▼
 ESP32-S3 sensor node ──LoRa──► Heltec receiver ──MQTT──► Raspberry Pi Zero
                                       │                         │
-                                      │ ACK / retry              │ local CSV log
+                                      │ ACK / retry              │ CSV log + pending queue
                                       ▼                         ▼
                                  Sensor node              Oracle APEX DSS
 ```
@@ -48,26 +48,65 @@ The first sketch talks directly to the 7-in-1 RS485 soil sensor. It sends the Mo
 
 ## Phase 2 — LoRa transport and MQTT gateway
 
-Phase 2 moves the probe reading onto a wireless link and adds the reliability behaviour that the final design depends on.
+- Sensor nodes pack readings into a fixed 44-byte `SoilPacket` and store a sequence number in ESP32 non-volatile storage.
+- Each transmission waits for a 23-byte ACK and retries up to two times.
+- The receiver sends ACKs for both new and duplicate packets, so a sender that missed the first ACK can recover on retransmission.
+- The receiver suppresses duplicate MQTT publishes and publishes new readings to `orchard/soil/<node-id>` with RSSI and SNR included.
 
-**Sensor node**
+## Phase 3 — Low-power nodes and the edge gateway
 
-- Reads the same RS485 sensor through a relay-controlled power stage.
-- Packs readings into a fixed 44-byte `SoilPacket`.
-- Stores a sequence number in ESP32 non-volatile storage so reboots do not reuse sequence numbers.
-- Waits for a 23-byte ACK after each transmission and retries up to two times.
+**Deep-sleep soil nodes**
 
-**Receiver**
+- Two node sketches use a 15-minute measurement interval.
+- The relay powers the sensor only during a reading.
+- The node returns to deep sleep after each transmission attempt.
+- Non-volatile sequence storage preserves packet identity across reboots.
 
-- Receives LoRa packets and sends an ACK for both new and duplicate packets. This lets a sender that missed the first ACK recover on retransmission.
-- Tracks the last sequence number and suppresses duplicate MQTT publishes.
-- Publishes new readings to `orchard/soil/<node-id>` as JSON containing the soil values plus RSSI and SNR.
+**Raspberry Pi gateway**
+
+- Subscribes to `orchard/soil/#` over local MQTT.
+- Writes every accepted reading to `soil_data.csv`.
+- Writes delivery telemetry to `soil_evaluation_log.csv`.
+- Posts readings to Oracle APEX using header-based ORDS parameters.
+- Stores failed posts in `pending_soil_data.csv` and retries them on a configurable interval.
+- Reads all configuration from environment variables, so no deployment address or secret is committed.
 
 **Files**
 
-- `firmware/phase-02-lora-mqtt/soil-node/soil_node.ino`
-- `firmware/phase-02-lora-mqtt/soil-node/soil_node_2.ino`
-- `firmware/phase-02-lora-mqtt/receiver/receiver.ino`
+- `firmware/phase-03-deep-sleep-nodes/soil-node-1/soil_node.ino`
+- `firmware/phase-03-deep-sleep-nodes/soil-node-2/soil_node.ino`
+- `gateway/monitoring.py`
+- `gateway/requirements.txt`
+- `.env.example`
+- `docs/apex-integration-notes.md`
+
+## Running the gateway
+
+```bash
+cd gateway
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+cp ../.env.example ../.env
+# Edit ../.env with your broker, storage path and APEX endpoint.
+
+python monitoring.py
+```
+
+On Windows, activate with `venv\Scripts\activate` instead.
+
+## Laboratory evaluation highlights
+
+The associated research evaluated the artefact under controlled connectivity and power interruptions.
+
+- Baseline: **46/46** expected packets were received and delivered to Oracle APEX (**100% PDR**).
+- Internet outage with synchronisation: **6/6** buffered readings were delivered after connectivity returned.
+- Combined synchronisation run: **53/53** received observations were eventually delivered.
+- A separate one-hour outage delivered **4** buffered readings within **12 seconds** of reconnection.
+- Readings were lost only when the LoRa receiver itself was powered off; those packets never reached the gateway.
+
+These results support the value of local logging and retry, while also showing that gateway/receiver power and stronger sequence tracking remain important design concerns.
 
 ## Pinout and hardware references
 
@@ -77,17 +116,21 @@ Phase 2 moves the probe reading onto a wireless link and adds the reliability be
 
 ![LoRa transmitter](docs/diagrams/lora-transmitter.png)
 
+![Raspberry Pi Zero W pinout](docs/diagrams/raspberry-pi-zero-pinout.jpg)
+
 ## Repository layout
 
 ```text
 firmware/                  Arduino sketches, grouped by development phase
+gateway/                   Raspberry Pi logger and APEX ingestion client
 docs/diagrams/             Pinout and architecture images
-gateway/                   Raspberry Pi gateway code (added in Phase 3)
+docs/                      Integration notes
+.env.example               Configuration template (copy to .env locally)
 ```
 
 ## Configuration and credentials
 
-No Wi-Fi passwords, broker addresses, PI login details or other secrets are stored in this repository. The Phase 2 receiver uses obvious placeholders; replace them locally before flashing. Any local configuration must be kept out of version control.
+No Wi-Fi passwords, broker addresses, PI login details or other secrets are stored in this repository. Firmware placeholders and `.env.example` are intentionally generic. Keep real configuration in local files such as `.env`, which is ignored by Git.
 
 ## Author
 
