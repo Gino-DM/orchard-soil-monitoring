@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.env
+!*.env.example
+
+# Local credentials / device configuration
+secrets.h
+config.h
+
+# Runtime data and logs
+data/*.csv
+*.log
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Arduino / PlatformIO build output
+build/
+.pio/

@@ -149,90 +149,101 @@ void loop()
     //
     // Bytes 17-18 = CRC
 
-    if (responseLength >= 17 &&
-        byteResponse[0] == 0x01 &&
-        byteResponse[1] == 0x03 &&
-        byteResponse[2] == 0x0E)
-    {
-      // -----------------------------
-      // CONVERT RAW VALUES
-      // -----------------------------
+// -----------------------------
+// FIND VALID MODBUS FRAME
+// -----------------------------
 
-      uint16_t humidity =
-        ((uint16_t)byteResponse[3] << 8) |
-         byteResponse[4];
+int frameStart = -1;
 
-      int16_t temperature =
-        ((int16_t)byteResponse[5] << 8) |
-         byteResponse[6];
-
-      uint16_t conductivity =
-        ((uint16_t)byteResponse[7] << 8) |
-         byteResponse[8];
-
-      uint16_t ph =
-        ((uint16_t)byteResponse[9] << 8) |
-         byteResponse[10];
-
-      uint16_t nitrogen =
-        ((uint16_t)byteResponse[11] << 8) |
-         byteResponse[12];
-
-      uint16_t phosphorus =
-        ((uint16_t)byteResponse[13] << 8) |
-         byteResponse[14];
-
-      uint16_t potassium =
-        ((uint16_t)byteResponse[15] << 8) |
-         byteResponse[16];
-
-      // -----------------------------
-      // DISPLAY SENSOR VALUES
-      // -----------------------------
-
-      Serial.println();
-      Serial.println("Sensor readings:");
-      Serial.println("-----------------------------");
-
-      Serial.print("Humidity:       ");
-      Serial.print(humidity / 10.0);
-      Serial.println(" %RH");
-
-      Serial.print("Temperature:    ");
-      Serial.print(temperature / 10.0);
-      Serial.println(" C");
-
-      Serial.print("Conductivity:   ");
-      Serial.print(conductivity);
-      Serial.println(" uS/cm");
-
-      Serial.print("pH:              ");
-      Serial.print(ph / 10.0);
-      Serial.println();
-
-      Serial.print("Nitrogen:       ");
-      Serial.println(nitrogen);
-
-      Serial.print("Phosphorus:     ");
-      Serial.println(phosphorus);
-
-      Serial.print("Potassium:      ");
-      Serial.println(potassium);
-
-      Serial.println("-----------------------------");
-    }
-    else
-    {
-      Serial.println();
-      Serial.println("Unexpected response format.");
-    }
-  }
-  else
+for (int i = 0; i <= responseLength - 19; i++)
+{
+  if (byteResponse[i] == 0x01 &&
+      byteResponse[i + 1] == 0x03 &&
+      byteResponse[i + 2] == 0x0E)
   {
-    Serial.println("No response received.");
+    frameStart = i;
+    break;
   }
+}
 
-  Serial.println("--------------------------------");
+if (frameStart >= 0)
+{
+  Serial.println();
+  Serial.println("Valid Modbus frame found!");
 
+  // -----------------------------
+  // CONVERT RAW VALUES
+  // -----------------------------
+
+  uint16_t humidity =
+    ((uint16_t)byteResponse[frameStart + 3] << 8) |
+     byteResponse[frameStart + 4];
+
+  int16_t temperature =
+    ((int16_t)byteResponse[frameStart + 5] << 8) |
+     byteResponse[frameStart + 6];
+
+  uint16_t conductivity =
+    ((uint16_t)byteResponse[frameStart + 7] << 8) |
+     byteResponse[frameStart + 8];
+
+  uint16_t ph =
+    ((uint16_t)byteResponse[frameStart + 9] << 8) |
+     byteResponse[frameStart + 10];
+
+  uint16_t nitrogen =
+    ((uint16_t)byteResponse[frameStart + 11] << 8) |
+     byteResponse[frameStart + 12];
+
+  uint16_t phosphorus =
+    ((uint16_t)byteResponse[frameStart + 13] << 8) |
+     byteResponse[frameStart + 14];
+
+  uint16_t potassium =
+    ((uint16_t)byteResponse[frameStart + 15] << 8) |
+     byteResponse[frameStart + 16];
+
+  // -----------------------------
+  // DISPLAY SENSOR VALUES
+  // -----------------------------
+
+  Serial.println();
+  Serial.println("Sensor readings:");
+  Serial.println("-----------------------------");
+
+  Serial.print("Humidity:       ");
+  Serial.print(humidity / 10.0);
+  Serial.println(" %RH");
+
+  Serial.print("Temperature:    ");
+  Serial.print(temperature / 10.0);
+  Serial.println(" C");
+
+  Serial.print("Conductivity:   ");
+  Serial.print(conductivity);
+  Serial.println(" uS/cm");
+
+  Serial.print("pH:             ");
+  Serial.print(ph / 10.0);
+  Serial.println();
+
+  Serial.print("Nitrogen:       ");
+  Serial.println(nitrogen);
+
+  Serial.print("Phosphorus:     ");
+  Serial.println(phosphorus);
+
+  Serial.print("Potassium:      ");
+  Serial.println(potassium);
+
+  Serial.println("-----------------------------");
+}
+else
+{
+  Serial.println();
+  Serial.println("No valid Modbus frame found.");
+ 
+}
+  }
   delay(2000);
 }
